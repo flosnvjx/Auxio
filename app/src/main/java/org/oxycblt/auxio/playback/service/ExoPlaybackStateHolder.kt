@@ -20,12 +20,15 @@ package org.oxycblt.auxio.playback.service
 
 import android.content.Context
 import android.content.Intent
+import android.media.MediaFormat
 import android.media.audiofx.AudioEffect
+import android.os.Build
 import android.provider.OpenableColumns
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -34,6 +37,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
+import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.MediaSource
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -51,6 +55,7 @@ import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.persist.PersistenceRepository
 import org.oxycblt.auxio.playback.replaygain.ReplayGainAudioProcessor
+import org.oxycblt.auxio.playback.replaygain.ReplayGainMode
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateHolder
@@ -636,11 +641,41 @@ class ExoPlaybackStateHolder(
             // Since Auxio is a music player, only specify an audio renderer to save
             // battery/apk size/cache size]
             val audioRenderer = RenderersFactory { handler, _, audioListener, _, _ ->
+                val customCodecAdapterFactory =
+                    object : MediaCodecAdapter.Factory {
+                        private val defaultFactory = MediaCodecAdapter.Factory.getDefault(context)
+
+                        override fun createAdapter(
+                            configuration: MediaCodecAdapter.Configuration
+                        ): MediaCodecAdapter {
+                            if (configuration.format.sampleMimeType == MimeTypes.AUDIO_AAC) {
+                                // Disable decode-time loudness normalization of AAC when ReplayGain
+                                // is off, enable and set target reference level to around -18 LUFS
+                                // when ReplayGain is active
+                                val drcLevel =
+                                    if (playbackSettings.replayGainMode != ReplayGainMode.OFF) 72
+                                    else -1
+                                configuration.mediaFormat.setInteger(
+                                    MediaFormat.KEY_AAC_DRC_TARGET_REFERENCE_LEVEL, drcLevel)
+                                if (Build.VERSION.SDK_INT >= 30) {
+                                    val albumMode =
+                                        if (playbackSettings.replayGainMode == ReplayGainMode.ALBUM)
+                                            1
+                                        else 0
+                                    configuration.mediaFormat.setInteger(
+                                        MediaFormat.KEY_AAC_DRC_ALBUM_MODE, albumMode)
+                                }
+                            }
+                            return defaultFactory.createAdapter(configuration)
+                        }
+                    }
                 arrayOf(
                     FfmpegAudioRenderer(handler, audioListener, replayGainProcessor),
                     MediaCodecAudioRenderer(
                         context,
+                        customCodecAdapterFactory,
                         MediaCodecSelector.DEFAULT,
+                        /* enableDecoderFallback= */ false,
                         handler,
                         audioListener,
                         DefaultAudioSink.Builder(context)
