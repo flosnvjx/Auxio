@@ -663,7 +663,7 @@ class ExoPlaybackStateHolder(
             // battery/apk size/cache size]
             val audioRenderer = RenderersFactory { handler, _, audioListener, _, _ ->
                 val customCodecAdapterFactory = object : MediaCodecAdapter.Factory {
-                    private val defaultFactory = MediaCodecAdapter.Factory.getDefault(context)
+                    private val defaultFactory = MediaCodecAdapter.Factory.DEFAULT
                     override fun createAdapter(configuration: MediaCodecAdapter.Configuration): MediaCodecAdapter {
                         if (configuration.format.sampleMimeType == MimeTypes.AUDIO_AAC) {
                             // Disable decode-time loudness normalization of AAC when ReplayGain is off, enable and set target reference level to around -18 LUFS when ReplayGain is active
@@ -681,7 +681,7 @@ class ExoPlaybackStateHolder(
                 }
                 arrayOf<BaseRenderer>(
                     FfmpegAudioRenderer(handler, audioListener, replayGainProcessor),
-                    MediaCodecAudioRenderer(
+                    object : MediaCodecAudioRenderer(
                         context,
                         customCodecAdapterFactory,
                         MediaCodecSelector.DEFAULT,
@@ -691,7 +691,29 @@ class ExoPlaybackStateHolder(
                         DefaultAudioSink.Builder(context)
                             .setAudioProcessors(arrayOf(replayGainProcessor))
                             .build(),
-                    ),
+                    ) {
+                        override fun onOutputFormatChanged(
+                            format: androidx.media3.common.Format,
+                            mediaFormat: android.media.MediaFormat?,
+                        ) {
+                            super.onOutputFormatChanged(format, mediaFormat)
+                            // Only interested in AAC streams
+                            if (format.sampleMimeType != MimeTypes.AUDIO_AAC) return
+                            if (Build.VERSION.SDK_INT < 35 || mediaFormat == null) return
+                            val currentSong = playbackManager.currentSong ?: return
+                            try {
+                                if (mediaFormat.containsKey(android.media.MediaFormat.KEY_AAC_DRC_OUTPUT_LOUDNESS)) {
+                                    val loudnessValue = mediaFormat.getInteger(android.media.MediaFormat.KEY_AAC_DRC_OUTPUT_LOUDNESS)
+                                    if (loudnessValue >= 0) {
+                                        L.d("AAC loudness detected for ${currentSong.uid}, bypassing ReplayGain")
+                                        replayGainProcessor.reportLoudnessDetected(currentSong.uid, true)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                // Ignore errors reading the key
+                            }
+                        }
+                    },
                 )
             }
 

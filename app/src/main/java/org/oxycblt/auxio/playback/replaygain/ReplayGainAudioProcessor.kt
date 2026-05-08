@@ -18,18 +18,21 @@
  
 package org.oxycblt.auxio.playback.replaygain
 
+import android.os.Build
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.Player
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import kotlin.math.pow
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.musikr.Album
+import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
 import timber.log.Timber as L
@@ -57,6 +60,47 @@ constructor(
             flush()
         }
 
+    @Volatile
+    private var bypass = false
+
+    /**
+     * A cache that remembers whether a track was detected to contain AAC embedded loudness.
+     * When a cached track starts again (e.g. via gapless), bypass is applied immediately.
+     * Only used on Android 15+.
+     */
+    private val loudnessCache = ConcurrentHashMap<Music.UID, Boolean>()
+
+    /** Whether the loudness detection feature is available on this device. */
+    private val loudnessDetectionEnabled = Build.VERSION.SDK_INT >= 35
+
+    /**
+     * Enable or disable bypass mode. When bypass is active, the processor copies
+     * the input buffer unchanged (no gain adjustment, no pre‑amp).
+     * This is used for AAC tracks that have integrated loudness metadata.
+     */
+    fun setBypassGain(bypass: Boolean) {
+        if (this.bypass != bypass) {
+            this.bypass = bypass
+            if (bypass) {
+                volume = 1f
+            }
+        }
+    }
+
+    /**
+     * Stores the loudness detection result for a track and immediately activates bypass
+     * if the track is currently playing. Called by the audio renderer when the decoder
+     * reports [android.media.MediaFormat.KEY_AAC_DRC_OUTPUT_LOUDNESS] with a non‑negative value.
+     */
+    fun reportLoudnessDetected(songUid: Music.UID, hasLoudness: Boolean) {
+        if (!loudnessDetectionEnabled) return
+        loudnessCache[songUid] = hasLoudness
+        if (playbackManager.currentSong?.uid == songUid && hasLoudness) {
+            L.d("Loudness detected for current track, enabling bypass")
+            setBypassGain(true)
+        }
+    }
+
     fun attach() {
         playbackManager.addListener(this)
         playbackSettings.registerListener(this)
@@ -72,12 +116,15 @@ constructor(
 
     override fun onIndexMoved(index: Int) {
         L.d("Index moved, updating current song")
+        bypass = false
         applyReplayGain(playbackManager.currentSong)
     }
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
         // Other types of queue changes preserve the current song.
         if (change.type == QueueChange.Type.SONG) {
+            L.d("Song changed, resetting bypass and checking cache")
+            bypass = false
             applyReplayGain(playbackManager.currentSong)
         }
     }
@@ -89,6 +136,7 @@ constructor(
         isShuffled: Boolean,
     ) {
         L.d("New playback started, updating playback information")
+        bypass = false
         applyReplayGain(playbackManager.currentSong)
     }
 
@@ -108,6 +156,13 @@ constructor(
         if (song == null) {
             L.d("Nothing playing, disabling adjustment")
             volume = 1f
+            return
+        }
+
+        // Only use loudness cache if the feature is enabled (Android 15+)
+        if (loudnessDetectionEnabled && (bypass || loudnessCache[song.uid] == true)) {
+            setBypassGain(true)
+            L.d("Bypass active (cached=${loudnessCache[song.uid]}), volume=1.0")
             return
         }
 
@@ -184,7 +239,7 @@ constructor(
         val limit = inputBuffer.limit()
         val buffer = replaceOutputBuffer(limit - pos)
 
-        if (volume == 1f) {
+        if (bypass || volume == 1f) {
             // Nothing to adjust, just copy the audio data.
             // isActive is technically a much better way of doing a no-op like this, but since
             // the adjustment can change during playback I'm largely forced to do this.
@@ -229,3 +284,4 @@ constructor(
         put(short.toInt().shr(8).toByte())
     }
 }
+
