@@ -26,9 +26,21 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     - name: Build debug APK with Gradle
+      id: build
       run: ./gradlew app:packageDebug
-    - name: Upload debug APK artifact
+      continue-on-error: true   # Allow the build to "fail" but continue to upload report
+    - name: Upload Gradle reports (always)
+      if: always()               # Run even if build step failed
+      uses: actions/upload-artifact@v4
+      with:
+        name: Gradle-reports
+        path: build/reports/     # This will include problems-report.html and other diagnostic files
+    - name: Upload debug APK artifact (only on success)
+      if: steps.build.outcome == 'success'
       uses: actions/upload-artifact@v4
       with:
         name: Auxio_Canary
         path: ./app/build/outputs/apk/debug/app-debug.apk
+    - name: Fail the job if build failed
+      if: steps.build.outcome == 'failure'
+      run: exit 1
