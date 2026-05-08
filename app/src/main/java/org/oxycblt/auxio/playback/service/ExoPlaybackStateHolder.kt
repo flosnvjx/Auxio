@@ -643,7 +643,7 @@ class ExoPlaybackStateHolder(
             val audioRenderer = RenderersFactory { handler, _, audioListener, _, _ ->
                 val customCodecAdapterFactory =
                     object : MediaCodecAdapter.Factory {
-                        private val defaultFactory = MediaCodecAdapter.Factory.getDefault(context)
+                        private val defaultFactory = MediaCodecAdapter.Factory.DEFAULT
 
                         override fun createAdapter(
                             configuration: MediaCodecAdapter.Configuration
@@ -671,16 +671,45 @@ class ExoPlaybackStateHolder(
                     }
                 arrayOf(
                     FfmpegAudioRenderer(handler, audioListener, replayGainProcessor),
-                    MediaCodecAudioRenderer(
-                        context,
-                        customCodecAdapterFactory,
-                        MediaCodecSelector.DEFAULT,
-                        /* enableDecoderFallback= */ false,
-                        handler,
-                        audioListener,
-                        DefaultAudioSink.Builder(context)
-                            .setAudioProcessors(arrayOf(replayGainProcessor))
-                            .build()))
+                    object :
+                        MediaCodecAudioRenderer(
+                            context,
+                            customCodecAdapterFactory,
+                            MediaCodecSelector.DEFAULT,
+                            /* enableDecoderFallback= */ false,
+                            handler,
+                            audioListener,
+                            DefaultAudioSink.Builder(context)
+                                .setAudioProcessors(arrayOf(replayGainProcessor))
+                                .build(),
+                        ) {
+                        override fun onOutputFormatChanged(
+                            format: androidx.media3.common.Format,
+                            mediaFormat: android.media.MediaFormat?,
+                        ) {
+                            super.onOutputFormatChanged(format, mediaFormat)
+                            if (Build.VERSION.SDK_INT < 35 || mediaFormat == null) return
+                            if (format.sampleMimeType != MimeTypes.AUDIO_AAC) return
+                            val currentSong = playbackManager.currentSong ?: return
+                            try {
+                                if (mediaFormat.containsKey(
+                                    android.media.MediaFormat.KEY_AAC_DRC_OUTPUT_LOUDNESS)) {
+                                    val loudnessValue =
+                                        mediaFormat.getInteger(
+                                            android.media.MediaFormat.KEY_AAC_DRC_OUTPUT_LOUDNESS)
+                                    if (loudnessValue >= 0) {
+                                        L.d(
+                                            "AAC loudness detected for ${currentSong.uid}, bypassing ReplayGain")
+                                        replayGainProcessor.reportLoudnessDetected(
+                                            currentSong.uid, true)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                // Ignore errors reading the key
+                            }
+                        }
+                    },
+                )
             }
 
             val exoPlayer =
