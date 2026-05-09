@@ -72,6 +72,30 @@
             android:textAppearance="?attr/textAppearanceBodyLarge"
             tools:ignore="RtlSymmetry" />
 
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/separator_ideographic_comma"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_medium"
+            android:layout_marginEnd="@dimen/spacing_medium"
+            android:paddingStart="@dimen/spacing_medium"
+            android:text="@string/set_separators_ideographic_comma"
+            android:textAlignment="viewStart"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            tools:ignore="RtlSymmetry" />
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/separator_fullwidth_ampersand"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_medium"
+            android:layout_marginEnd="@dimen/spacing_medium"
+            android:paddingStart="@dimen/spacing_medium"
+            android:text="@string/set_separators_fullwidth_ampersand"
+            android:textAlignment="viewStart"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            tools:ignore="RtlSymmetry" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

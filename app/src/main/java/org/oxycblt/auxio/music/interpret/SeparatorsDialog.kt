@@ -77,6 +77,8 @@ class SeparatorsDialog : ViewBindingMaterialDialogFragment<DialogSeparatorsBindi
                     Separators.SLASH -> binding.separatorSlash.isChecked = true
                     Separators.PLUS -> binding.separatorPlus.isChecked = true
                     Separators.AND -> binding.separatorAnd.isChecked = true
+                    Separators.IDEOGRAPHIC_COMMA -> binding.separatorIdeographicComma.isChecked = true
+                    Separators.FULLWIDTH_AMPERSAND -> binding.separatorFullwidthAmpersand.isChecked = true
                     else -> L.w("Unexpected separator in settings data")
                 }
             }
@@ -99,6 +101,8 @@ class SeparatorsDialog : ViewBindingMaterialDialogFragment<DialogSeparatorsBindi
         if (binding.separatorSlash.isChecked) separators += Separators.SLASH
         if (binding.separatorPlus.isChecked) separators += Separators.PLUS
         if (binding.separatorAnd.isChecked) separators += Separators.AND
+        if (binding.separatorIdeographicComma.isChecked) separators += Separators.IDEOGRAPHIC_COMMA
+        if (binding.separatorFullwidthAmpersand.isChecked) separators += Separators.FULLWIDTH_AMPERSAND
         return separators
     }
 

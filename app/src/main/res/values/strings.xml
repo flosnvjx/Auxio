@@ -280,6 +280,8 @@
     <string name="set_separators_slash">Slash (/)</string>
     <string name="set_separators_plus">Plus (+)</string>
     <string name="set_separators_and">Ampersand (&amp;)</string>
+    <string name="set_separators_ideographic_comma">Ideographic comma (、)</string>
+    <string name="set_separators_fullwidth_ampersand">Fullwidth ampersand (＆)</string>
     <string name="set_separators_warning">Warning: Using this setting may result in some tags being incorrectly interpreted as having multiple values. You can resolve this by prefixing unwanted separator characters with a backslash (\\).</string>
     <string name="set_intelligent_sorting">Intelligent sorting</string>
     <string name="set_intelligent_sorting_desc">Correctly sort names that begin with numbers or words like \"the\" (works best with english-language music)</string>

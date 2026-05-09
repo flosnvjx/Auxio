@@ -43,6 +43,8 @@ interface Separators {
         const val SLASH = '/'
         const val PLUS = '+'
         const val AND = '&'
+        const val IDEOGRAPHIC_COMMA = '\u3001'   // 、
+        const val FULLWIDTH_AMPERSAND = '\uFF06' // ＆
 
         /**
          * Creates a new instance from a string of separator characters to use.
