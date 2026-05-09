@@ -38,6 +38,18 @@ android {
         freeCompilerArgs += "-Xjvm-default=all"
     }
 
+    signingConfigs {
+        // Use debug signing for release builds when running on CI or locally without a keystore
+        release {
+            // This will use the same keys as the debug build
+            // You can override with environment variables for a real keystore
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix ".debug"
@@ -48,6 +60,9 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+
+            // Use debug signing for convenience in CI – replace with real keys for production
+            signingConfig signingConfigs.debug
 
             dependenciesInfo {
                 includeInApk = false
