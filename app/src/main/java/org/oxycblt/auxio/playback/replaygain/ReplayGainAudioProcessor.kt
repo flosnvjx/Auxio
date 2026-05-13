@@ -87,6 +87,12 @@ constructor(
     }
 
     /**
+     * Returns true if the given song is already marked as bypassed in the cache.
+     * This allows callers to skip redundant detection logic.
+     */
+    fun isBypassed(songUid: Music.UID): Boolean = loudnessCache[songUid] == true
+
+    /**
      * Stores the loudness detection result for a track and immediately activates bypass if the
      * track is currently playing. Called by the audio renderer when the decoder reports
      * [android.media.MediaFormat.KEY_AAC_DRC_OUTPUT_LOUDNESS] with a non‑negative value.
@@ -96,6 +102,19 @@ constructor(
         loudnessCache[songUid] = hasLoudness
         if (playbackManager.currentSong?.uid == songUid && hasLoudness) {
             L.d("Loudness detected for current track, enabling bypass")
+            setBypassGain(true)
+        }
+    }
+
+    /**
+     * Reports that the track is xHE‑AAC, which has integrated loudness normalization.
+     * This can be determined from the codec string before decoding starts.
+     * Enables bypass immediately for the current track and caches the result.
+     */
+    fun reportXHEAACDetected(songUid: Music.UID) {
+        L.d("xHE‑AAC detected for track $songUid, enabling bypass")
+        loudnessCache[songUid] = true
+        if (playbackManager.currentSong?.uid == songUid) {
             setBypassGain(true)
         }
     }
