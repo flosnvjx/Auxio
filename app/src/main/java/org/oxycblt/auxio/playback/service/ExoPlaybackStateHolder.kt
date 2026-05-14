@@ -33,7 +33,9 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer
+import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.FormatHolder
 import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
@@ -683,14 +685,40 @@ class ExoPlaybackStateHolder(
                                 .setAudioProcessors(arrayOf(replayGainProcessor))
                                 .build(),
                         ) {
+                        override fun onInputFormatChanged(
+                            formatHolder: FormatHolder
+                        ): DecoderReuseEvaluation? {
+                            val format = formatHolder.format
+                            if (format?.sampleMimeType == MimeTypes.AUDIO_AAC) {
+                                val codecs = format.codecs
+                                if (codecs != null &&
+                                    codecs.split(",").any { it.trim() == "mp4a.40.42" }) {
+                                    val currentSong = playbackManager.currentSong
+                                    if (currentSong != null) {
+                                        L.d(
+                                            "xHE-AAC detected for ${currentSong.uid}, enabling bypass early")
+                                        replayGainProcessor.reportLoudnessDetected(
+                                            currentSong.uid, true)
+                                    }
+                                }
+                            }
+                            return super.onInputFormatChanged(formatHolder)
+                        }
+
                         override fun onOutputFormatChanged(
                             format: androidx.media3.common.Format,
                             mediaFormat: android.media.MediaFormat?,
                         ) {
                             super.onOutputFormatChanged(format, mediaFormat)
-                            if (Build.VERSION.SDK_INT < 35 || mediaFormat == null) return
+                            if (mediaFormat == null) return
                             if (format.sampleMimeType != MimeTypes.AUDIO_AAC) return
                             val currentSong = playbackManager.currentSong ?: return
+                            if (replayGainProcessor.isLoudnessDetected(currentSong.uid)) {
+                                L.d(
+                                    "Bypass already enabled for ${currentSong.uid}, skipping output loudness detection")
+                                return
+                            }
+                            if (Build.VERSION.SDK_INT < 35) return
                             try {
                                 if (mediaFormat.containsKey(
                                     android.media.MediaFormat.KEY_AAC_DRC_OUTPUT_LOUDNESS)) {

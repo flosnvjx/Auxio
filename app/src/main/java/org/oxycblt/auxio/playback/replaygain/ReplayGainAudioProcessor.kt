@@ -18,7 +18,6 @@
  
 package org.oxycblt.auxio.playback.replaygain
 
-import android.os.Build
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.Player
@@ -64,13 +63,9 @@ constructor(
 
     /**
      * A cache that remembers whether a track was detected to contain AAC embedded loudness. When a
-     * cached track starts again (e.g. via gapless), bypass is applied immediately. Only used on
-     * Android 15+.
+     * cached track starts again (e.g. via gapless), bypass is applied immediately.
      */
     private val loudnessCache = ConcurrentHashMap<Music.UID, Boolean>()
-
-    /** Whether the loudness detection feature is available on this device. */
-    private val loudnessDetectionEnabled = Build.VERSION.SDK_INT >= 35
 
     /**
      * Enable or disable bypass mode. When bypass is active, the processor copies the input buffer
@@ -89,16 +84,22 @@ constructor(
     /**
      * Stores the loudness detection result for a track and immediately activates bypass if the
      * track is currently playing. Called by the audio renderer when the decoder reports
-     * [android.media.MediaFormat.KEY_AAC_DRC_OUTPUT_LOUDNESS] with a non‑negative value.
+     * [android.media.MediaFormat.KEY_AAC_DRC_OUTPUT_LOUDNESS] with a non‑negative value, or when an
+     * xHE-AAC track is detected via its codec string before decoding starts.
      */
     fun reportLoudnessDetected(songUid: Music.UID, hasLoudness: Boolean) {
-        if (!loudnessDetectionEnabled) return
         loudnessCache[songUid] = hasLoudness
         if (playbackManager.currentSong?.uid == songUid && hasLoudness) {
             L.d("Loudness detected for current track, enabling bypass")
             setBypassGain(true)
         }
     }
+
+    /**
+     * Returns true if loudness has already been detected and cached for the given song UID. This
+     * can be used to avoid redundant detection steps.
+     */
+    fun isLoudnessDetected(songUid: Music.UID): Boolean = loudnessCache[songUid] == true
 
     fun attach() {
         playbackManager.addListener(this)
@@ -158,8 +159,8 @@ constructor(
             return
         }
 
-        // Only use loudness cache if the feature is enabled (Android 15+)
-        if (loudnessDetectionEnabled && (bypass || loudnessCache[song.uid] == true)) {
+        // Check if bypass is already active or if the track has been cached as having loudness
+        if (bypass || loudnessCache[song.uid] == true) {
             setBypassGain(true)
             L.d("Bypass active (cached=${loudnessCache[song.uid]}), volume=1.0")
             return
